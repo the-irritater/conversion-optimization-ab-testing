@@ -91,13 +91,13 @@ Be sure to click **"Run All"** to execute the cells and view the saved visualiza
 ## 📊 Key Insights
 
 ### Conversion Lift
-![Conversion](assets/conversion_rate.png)
+![Conversion](assets/revenue_impact.png)
 
 ### Causal Impact (Logistic Regression)
 ![Odds Ratio](assets/odds_ratio_plot.png)
 
 ### Segment Analysis (Device Type)
-![Device](assets/revenue_impact.png)
+![Device](assets/conversion_rate.png)
 
 ---
 
