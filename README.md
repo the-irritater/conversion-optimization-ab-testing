@@ -8,11 +8,6 @@ A professional, end-to-end data analysis project demonstrating the lifecycle of 
 
 ---
 
-## Author
-**Sanman Kadam**
-
----
-
 ## Abstract
 
 Businesses frequently run A/B tests to improve product features such as checkout flows. However, naive analysis, such as comparing average conversion rates, can lead to misleading conclusions due to confounding variables and Simpson’s Paradox.
