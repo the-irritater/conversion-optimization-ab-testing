@@ -34,10 +34,6 @@ The objective is to evaluate whether the new checkout flow significantly improve
 
 ---
 
-
-
----
-
 ## Repository Structure
 
 ```text
