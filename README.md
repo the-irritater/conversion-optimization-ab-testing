@@ -138,27 +138,7 @@ conversion-optimization-ab-testing/
 │   ├── odds_ratio_plot.png
 │   └── revenue_impact.png
 └── .gitignore
-
 ```
-## Tech Stack
-
-- numpy, pandas (data manipulation)  
-- matplotlib, seaborn (data visualization)  
-- scipy (statistical testing)  
-- statsmodels (logistic regression)  
-- scikit-learn (preprocessing and scaling)  
-
----
-## Key Insights
-
-### Conversion Lift
-![Conversion](assets/revenue_impact.png)
-
-### Causal Impact (Logistic Regression)
-![Odds Ratio](assets/odds_ratio_plot.png)
-
-### Segment Analysis (Device Type)
-![Device](assets/conversion_rate.png)
 
 ---
 
