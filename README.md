@@ -109,4 +109,13 @@ By combining traditional hypothesis testing with causal inference and Bayesian m
 
 ---
 
+## Author
+
+Sanman Kadam
+MSc Statistics | Data Analyst | Data Science Enthusiast
+
+GitHub: https://github.com/the-irritater
+
+---
+
 *Created as a demonstration of advanced statistical analysis and business intelligence methodologies.*
