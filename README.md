@@ -1,4 +1,4 @@
-# 📊 E-Commerce Conversion Optimization: Causal A/B Testing Framework
+# E-Commerce Conversion Optimization: Causal A/B Testing Framework
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Data Science](https://img.shields.io/badge/Data%20Science-A%2FB%20Testing-orange.svg)]()
@@ -6,7 +6,13 @@
 
 A professional, end-to-end data analysis portfolio project demonstrating the entire lifecycle of an **E-Commerce A/B Experiment** using rigorous statistical methods.
 
-## 🎯 Abstract
+---
+
+## Author
+**Sanman Kadam**
+
+---
+## Abstract
 
 Businesses frequently run A/B tests to improve product features (like checkout flows). However, naive analyses (like simply looking at average conversion rates) can lead to highly skewed conclusions due to confounding variables and Simpson's Paradox. 
 
@@ -16,15 +22,28 @@ Using **Simulated Data** specifically engineered with hidden confounders (device
 3. **Bayesian A/B Testing** using a Beta-Binomial model to determine the exact *Probability of Superiority* and *Expected Loss*, making the results highly interpretable for business stakeholders.
 4. **Business Impact Simulation**, projecting statistical findings into annualized revenue metrics.
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
-├── README.md                                 # Project overview and instructions
-├── requirements.txt                          # Minimal Python dependencies
-├── Conversion_Optimization_Analysis.ipynb    # Main Analysis Notebook (Run this!)
-├── create_notebook.py                        # Notebook generation script
-├── frequentist_ab.py                         # (Optional) Standalone Frequentist A/B testing module
-└── power_analysis.py                         # (Optional) Standalone Sample size calculation module
+conversion-optimization-ab-testing/
+│
+├── README.md
+├── requirements.txt
+├── Conversion_Optimization_Analysis.ipynb
+│
+├── src/
+│   ├── frequentist_ab.py
+│   ├── power_analysis.py
+│
+├── scripts/
+│   └── create_notebook.py
+│
+├── assets/
+│   ├── conversion_rate.png
+│   ├── odds_ratio_plot.png
+│   └── device_conversion.png
+│
+└── .gitignore 
 ```
 
 ## 🛠️ Tech Stack & Requirements
@@ -36,7 +55,7 @@ The analysis relies on standard Python data science libraries:
 - `statsmodels` (Logistic Regression Analysis)
 - `scikit-learn` (Data scaling & preprocessing)
 
-## 🚀 How to Run the Analysis
+## How to Run the Analysis
 
 1. **Clone the repository:**
    ```bash
@@ -54,7 +73,7 @@ The analysis relies on standard Python data science libraries:
 
    *(Note: The notebook can be cleanly re-generated from scratch locally at any time by running `python create_notebook.py`)*
 
-## 💡 Key Findings
+## Key Findings
 * **Treatment Effect:** The "One-Click Checkout" variant successfully created an 18% relative uplift in conversion rate.
 * **Causal Significance:** Even holding user demographics entirely constant, the variant reliably improves conversion odds by ~25% (O.R = ~1.25).
 * **Bayesian Outcome:** There is a nearly 100% probability that the variant outperforms the control, with almost zero expected loss.
