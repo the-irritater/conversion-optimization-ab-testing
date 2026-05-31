@@ -8,7 +8,7 @@ import sys
 import os
 
 NOTEBOOK_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             "Conversion_Optimization_Analysis.ipynb")
+                             "notebook", "Conversion_Optimization_Analysis.ipynb")
 
 
 def make_markdown_cell(source_lines):
@@ -31,7 +31,7 @@ def find_cell_index_containing(cells, search_text, start=0):
 
 # --- Experiment Design (keep only 1 copy) ---
 EXPERIMENT_DESIGN_MD = make_markdown_cell([
-    "## 5.5. Experiment Design & Power Analysis\n",
+    "## 5.6. Experiment Design & Power Analysis\n",
     "\n",
     "Before interpreting test results, it is essential to verify that the experiment was properly designed to detect a meaningful effect. A well-designed experiment specifies the following parameters **before** data collection begins:\n",
     "\n",
@@ -102,7 +102,7 @@ EXPERIMENT_DESIGN_CODE = make_code_cell([
     "        f'{required_n:,}',\n",
     "        f'{n_control:,}',\n",
     "        f'{n_variant:,}',\n",
-    "        '\u2705 Yes' if min(n_control, n_variant) >= required_n else '\u274c No'\n",
+    "        'Yes' if min(n_control, n_variant) >= required_n else 'No'\n",
     "    ]\n",
     "})\n",
     "\n",
@@ -112,7 +112,7 @@ EXPERIMENT_DESIGN_CODE = make_code_cell([
     "    print(f'\\nConclusion: Both groups exceed the minimum required sample size of {required_n:,}.')\n",
     "    print('The experiment is adequately powered to detect a 15% relative lift.')\n",
     "else:\n",
-    "    print(f'\\n\u26a0\ufe0f Warning: Experiment may be underpowered. Need {required_n:,} per group.')\n"
+    "    print(f'\\nWarning: Experiment may be underpowered. Need {required_n:,} per group.')\n"
 ])
 
 # --- Naive vs Adjusted (improved version with counterfactual predictions) ---
@@ -168,7 +168,7 @@ NAIVE_ANALYSIS_CODE = make_code_cell([
     "        f'{raw_variant:.2%}',\n",
     "        f'{raw_diff_pp:.2f}',\n",
     "        f'{raw_relative_pct:.1f}%',\n",
-    "        '\u2014',\n",
+    "        '--',\n",
     "        f'{p_value:.4g}',\n",
     "    ],\n",
     "    'Adjusted (Logistic Reg.)': [\n",
@@ -386,14 +386,13 @@ def main():
     # Find original cells by their unique content signatures
     new_cells = []
 
-    # --- Original cells 0-13 (Sections 1-5 EDA) ---
-    # These are always at the beginning; find where Section 5.5 starts
-    first_55 = find_cell_index_containing(cells, "## 5.5. Experiment Design")
-    if first_55 == -1:
-        print("ERROR: Can't find Section 5.5")
+    # These are always at the beginning; find where Section 5.6 starts
+    first_56 = find_cell_index_containing(cells, "## 5.6. Experiment Design")
+    if first_56 == -1:
+        print("ERROR: Can't find Section 5.6")
         sys.exit(1)
-    new_cells.extend(cells[:first_55])  # everything before first 5.5
-    print(f"  Kept {first_55} original EDA cells")
+    new_cells.extend(cells[:first_56])  # everything before first 5.6
+    print(f"  Kept {first_56} original EDA cells")
 
     # --- Insert 1 copy of Experiment Design ---
     new_cells.append(EXPERIMENT_DESIGN_MD)
