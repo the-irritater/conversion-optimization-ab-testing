@@ -229,6 +229,10 @@ df.info()
 add_md("""**Interpretation:**
 We have successfully generated a dataset of 10,000 unique user sessions. The `info()` output confirms the presence of missing values in `time_spent_mins`. The distributions and relationships built into the logits (e.g., returning users converting at higher rates, mobile devices showing lower conversion) will allow us to demonstrate both confounding and segment analysis later.
 
+### Why Simulated Data Was Used
+* **Data Privacy and Availability:** Public e-commerce A/B testing datasets are rare, heavily anonymized, and rarely contain the complete user-level behavioral and segment features (such as device types, customer history, cart values, and session duration) required for advanced causal inference.
+* **Controlled Methodological Testing:** This simulation was specifically designed to reproduce real-world e-commerce conversion patterns. It allows us to mathematically control baseline conversion rates and covariate relationships to demonstrate that our statistical and causal models (like z-tests, logistic regressions, and Bayesian conjugate models) can accurately recover the ground-truth treatment effect.
+
 ---
 
 ## 5.1. Data Preprocessing
@@ -1025,7 +1029,7 @@ This table condenses the experiment into the exact facts needed for a go/no-go m
 
 import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-output_dir = os.path.join(project_root, "notebook")
+output_dir = os.path.join(project_root, "analysis")
 os.makedirs(output_dir, exist_ok=True)
 output_path = os.path.join(output_dir, "Conversion_Optimization_Analysis.ipynb")
 with open(output_path, "w", encoding="utf-8") as f:

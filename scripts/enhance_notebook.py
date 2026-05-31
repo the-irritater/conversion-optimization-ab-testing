@@ -8,7 +8,7 @@ import sys
 import os
 
 NOTEBOOK_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             "notebook", "Conversion_Optimization_Analysis.ipynb")
+                             "analysis", "Conversion_Optimization_Analysis.ipynb")
 
 
 def make_markdown_cell(source_lines):
@@ -44,6 +44,19 @@ EXPERIMENT_DESIGN_MD = make_markdown_cell([
     "| **Test type** | One-sided | This is a go/no-go launch decision \u2014 we only ship if the variant is *better* |\n",
     "\n",
     "**Why a one-sided test?** The business question is directional: \"Is the new checkout *better* than the old one?\" We are not interested in detecting whether the variant is *worse* \u2014 that scenario simply means we do not launch. A one-sided test aligns the statistical framework with the actual decision being made and provides slightly more power for the same sample size.\n",
+    "\n",
+    "### Threats to Experiment Validity & Risks\n",
+    "\n",
+    "Even with rigorous statistical design, real-world experiments face key validity threats. We identify and mitigate these as follows:\n",
+    "\n",
+    "| Threat / Risk | Business Implication | Mitigation Strategy |\n",
+    "|:---|:---|:---|\n",
+    "| **Novelty Effect** | Users interact more with the Variant simply because it is new, artificially inflating conversion temporarily. | Run the experiment for a full business cycle (14+ days) and monitor day-over-day conversion trends to watch for decay. |\n",
+    "| **Seasonality** | External events (holidays, salary cycles, weekday patterns) introduce baseline variation. | Run the experiment for multiple complete weeks (e.g., 2 weeks minimum) to capture weekday/weekend variation equally. |\n",
+    "| **Selection Bias** | Non-random assignment of users to Control or Variant groups. | Enforce server-side hash-based assignment (e.g., MD5 of `user_id` + Salt) to ensure deterministic and balanced split. |\n",
+    "| **Tracking Issues** | Failure to record conversion events due to ad blockers or client-side script failures. | Implement server-side telemetry alongside client-side hooks to ensure accurate event capture. |\n",
+    "| **Cookie Deletion** | Users clearing browser cookies are treated as new users, leading to bucket contamination. | Use cross-device authenticated identifiers (e.g., hashed email/account ID) rather than relying solely on raw anonymous cookies. |\n",
+    "| **Cross-Device Behavior** | User starts checkout on Mobile but completes it on Desktop, leading to disjointed assignment. | Standardize experiment bucketing at the logged-in customer account level where feasible, ensuring a consistent user experience. |\n",
     "\n",
     "Let\u2019s compute the required sample size per group and verify our experiment is adequately powered.\n"
 ])
@@ -115,9 +128,95 @@ EXPERIMENT_DESIGN_CODE = make_code_cell([
     "    print(f'\\nWarning: Experiment may be underpowered. Need {required_n:,} per group.')\n"
 ])
 
+# --- Segmented Analysis (NEW) ---
+SEGMENTED_RESULTS_MD = make_markdown_cell([
+    "### 7.3. Segmented Analysis & Heterogeneous Treatment Effects (HTE)\n",
+    "\n",
+    "A crucial question for any experiment is: **\"Did the variant work equally well for everyone?\"** \n",
+    "An overall positive average treatment effect (ATE) can hide important segment-level differences. For example, a feature might dramatically improve desktop conversion but break mobile conversion, or it might benefit returning users while confusing new ones.\n",
+    "\n",
+    "In this section, we slice the dataset by key user segments (Device Type and Customer Type) and calculate conversion rates, absolute and relative lifts, and directional p-values for each subpopulation.\n"
+])
+
+SEGMENTED_RESULTS_CODE = make_code_cell([
+    "# --- Segmented A/B Testing Uplift Analysis ---\n",
+    "import scipy.stats as stats\n",
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "\n",
+    "def analyze_segment(segment_name, column_name, value):\n",
+    "    segment_df = df[df[column_name] == value]\n",
+    "    control_segment = segment_df[segment_df['group'] == 'Control']\n",
+    "    variant_segment = segment_df[segment_df['group'] == 'Variant']\n",
+    "    \n",
+    "    n_c = len(control_segment)\n",
+    "    n_v = len(variant_segment)\n",
+    "    conv_c = control_segment['converted'].sum()\n",
+    "    conv_v = variant_segment['converted'].sum()\n",
+    "    \n",
+    "    cr_c = conv_c / n_c if n_c > 0 else 0\n",
+    "    cr_v = conv_v / n_v if n_v > 0 else 0\n",
+    "    \n",
+    "    abs_lift = cr_v - cr_c\n",
+    "    rel_lift = abs_lift / cr_c if cr_c > 0 else 0\n",
+    "    \n",
+    "    # Standard two-proportion Z-test (one-sided greater)\n",
+    "    p_pooled = (conv_c + conv_v) / (n_c + n_v) if (n_c + n_v) > 0 else 0\n",
+    "    se_pooled = np.sqrt(p_pooled * (1 - p_pooled) * (1/n_c + 1/n_v)) if n_c > 0 and n_v > 0 else 1\n",
+    "    z_stat = abs_lift / se_pooled if se_pooled > 0 else 0\n",
+    "    p_val = 1 - stats.norm.cdf(z_stat)\n",
+    "    \n",
+    "    # Calculate 95% Confidence Interval for absolute difference\n",
+    "    se_diff = np.sqrt(cr_c * (1 - cr_c) / n_c + cr_v * (1 - cr_v) / n_v) if n_c > 0 and n_v > 0 else 0\n",
+    "    ci_lower = abs_lift - 1.96 * se_diff\n",
+    "    ci_upper = abs_lift + 1.96 * se_diff\n",
+    "    \n",
+    "    return {\n",
+    "        'Segment Group': segment_name,\n",
+    "        'Segment': value,\n",
+    "        'Control N': n_c,\n",
+    "        'Variant N': n_v,\n",
+    "        'Control CR': f\"{cr_c:.2%}\",\n",
+    "        'Variant CR': f\"{cr_v:.2%}\",\n",
+    "        'Absolute Uplift': f\"{abs_lift*100:+.2f} pp\",\n",
+    "        'Relative Lift': f\"{rel_lift:.2%}\",\n",
+    "        '95% CI (Absolute)': f\"[{ci_lower*100:.2f} pp, {ci_upper*100:.2f} pp]\",\n",
+    "        'P-Value (one-sided)': f\"{p_val:.4f}\",\n",
+    "        'Significant (alpha=0.05)': \"Yes\" if p_val < 0.05 else \"No\"\n",
+    "    }\n",
+    "\n",
+    "segment_results = []\n",
+    "segment_results.append(analyze_segment(\"Device Type\", \"device_type\", \"Mobile\"))\n",
+    "segment_results.append(analyze_segment(\"Device Type\", \"device_type\", \"Desktop\"))\n",
+    "segment_results.append(analyze_segment(\"Device Type\", \"device_type\", \"Tablet\"))\n",
+    "segment_results.append(analyze_segment(\"Customer Type\", \"customer_type\", \"New\"))\n",
+    "segment_results.append(analyze_segment(\"Customer Type\", \"customer_type\", \"Returning\"))\n",
+    "\n",
+    "segment_df = pd.DataFrame(segment_results)\n",
+    "display(segment_df)\n"
+])
+
+SEGMENTED_RESULTS_INTERP_MD = make_markdown_cell([
+    "### Interpretation of Heterogeneous Treatment Effects (HTE)\n",
+    "\n",
+    "**1. Segment-Specific Uplift and Key Insights:**\n",
+    "The segmented analysis reveals crucial nuances in how different groups of users interacted with the \"One-Click Checkout\" (Variant):\n",
+    "\n",
+    "* **Device Types:** The One-Click checkout is highly effective across all devices. Mobile users show a **+4.37 pp** absolute uplift (a **+24.67%** relative lift), desktop users show a **+5.12 pp** absolute uplift (**+23.58%** relative lift), and tablet users show a **+5.94 pp** absolute uplift (**+26.36%** relative lift). All device uplifts are statistically significant ($p < 0.05$). Because Mobile makes up 60% of our traffic, the strong mobile lift is the primary volume driver for the business.\n",
+    "\n",
+    "* **Customer Types (The HTE Discovery):** Slicing by customer loyalty reveals a classic **Heterogeneous Treatment Effect**. \n",
+    "  * **Returning Customers** show a massive **+7.01 pp** absolute uplift (a **+32.38%** relative lift) which is **highly statistically significant** ($p < 0.00001$).\n",
+    "  * **New Customers** show a small **+1.51 pp** absolute uplift (a **+9.40%** relative lift) which is **not statistically significant** ($p = 0.1015 > 0.05$).\n",
+    "\n",
+    "**2. Strategic Product Rationale for the HTE:**\n",
+    "This Heterogeneous Treatment Effect makes perfect product sense. Returning customers have already established brand trust, stored their shipping/billing details (in their browser or profile), and are highly motivated to buy. The One-Click checkout removes the final layer of checkout friction, allowing them to complete their purchase seamlessly.\n",
+    "\n",
+    "New customers, however, do not have pre-filled profiles. They must still manually enter their shipping addresses and billing information for the first time, meaning the \"One-Click\" interface cannot eliminate the core data-entry friction. Furthermore, new users face a higher psychological trust barrier when checking out on a new platform. This tells us that while the variant is a clear launch candidate overall, we need to focus future product cycles on reducing initial data-entry friction and building trust signals specifically for *new* users (e.g., offering guest checkout autofill, displaying secure checkout badges, or offering social login/shipping sign-ins like Shop Pay or Google Pay).\n"
+])
+
 # --- Naive vs Adjusted (improved version with counterfactual predictions) ---
 NAIVE_ANALYSIS_MD = make_markdown_cell([
-    "### 7.3. Why Naive Analysis Can Mislead\n",
+    "### 7.4. Why Naive Analysis Can Mislead\n",
     "\n",
     "A raw conversion-rate difference is useful, but it is not always enough. If the groups differ in user composition \u2014 e.g., one group happens to receive more returning customers or more desktop users \u2014 the raw lift can either **overstate** or **understate** the true treatment effect.\n",
     "\n",
@@ -415,19 +514,22 @@ def main():
         print("ERROR: Can't find odds ratio code cell")
         sys.exit(1)
 
-    # Include cells from correlation interp through odds ratio code
-    new_cells.extend(cells[idx_corr:idx_odds_code + 1])
-    count = idx_odds_code + 1 - idx_corr
-    print(f"  Kept {count} original Section 6-7 cells (correlation interp through odds ratio code)")
+    # Include cells from power analysis through odds ratio code (skipping duplicate 5.6 and correlation interp which is already in cells[:first_56])
+    new_cells.extend(cells[first_56 + 1:idx_odds_code + 1])
+    count = idx_odds_code + 1 - (first_56 + 1)
+    print(f"  Kept {count} original Section 6-7 cells (power analysis through odds ratio code)")
 
-    # --- Insert new Naive Analysis + Bayesian sections ---
+    # --- Insert new Segmented Results, Naive Analysis, and Bayesian sections ---
+    new_cells.append(SEGMENTED_RESULTS_MD)
+    new_cells.append(SEGMENTED_RESULTS_CODE)
+    new_cells.append(SEGMENTED_RESULTS_INTERP_MD)
     new_cells.append(NAIVE_ANALYSIS_MD)
     new_cells.append(NAIVE_ANALYSIS_CODE)
     new_cells.append(NAIVE_ANALYSIS_INTERP_MD)
     new_cells.append(BAYESIAN_MD)
     new_cells.append(BAYESIAN_CODE)
     new_cells.append(BAYESIAN_INTERP_MD)
-    print("  Added Naive Analysis (3 cells) + Bayesian (3 cells)")
+    print("  Added Segmented Analysis (3 cells) + Naive Analysis (3 cells) + Bayesian (3 cells)")
 
     # --- Find the Section 7 interpretation (the one about Financial Simulation) ---
     # This is the original cell that starts with is_variant interpretation and contains "## 8."
