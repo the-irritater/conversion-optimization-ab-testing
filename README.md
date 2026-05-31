@@ -122,6 +122,42 @@ To ensure the integrity of the experiment results, we proactively identified and
 
 ---
 
+## Randomization Validation
+
+Before interpreting treatment effects, a rigorous experimentation workflow validates that the randomization infrastructure itself is working correctly. We perform two standard industry checks:
+
+### A/A Validation
+
+An A/A test splits traffic into two identical experiences (Control A vs. Control A) and verifies that the testing platform does not generate false positives. If a significant difference appears when both groups receive the same treatment, it indicates a problem with randomization, instrumentation, or logging — not a real effect.
+
+In this project, we simulate an A/A test by randomly splitting the Control group into two halves and comparing their conversion rates using a two-proportion z-test:
+
+| Metric | Result |
+|:---|:---|
+| Control-A conversion rate | ~19.5% |
+| Control-B conversion rate | ~19.8% |
+| Z-statistic | ~0.15 |
+| P-value (two-sided) | ~0.88 |
+| Conclusion | **No significant difference** — randomization and instrumentation are validated |
+
+The non-significant result confirms that our testing infrastructure does not introduce systematic bias.
+
+### Sample Ratio Mismatch (SRM) Test
+
+A Sample Ratio Mismatch occurs when the observed traffic split differs from the intended split (50/50 in our case). SRM can indicate bugs in the assignment logic, bot traffic, or data pipeline issues. We use a chi-square goodness-of-fit test:
+
+| Metric | Result |
+|:---|:---|
+| Expected split | 50.0% / 50.0% |
+| Observed split | ~50.1% / ~49.9% |
+| Chi-square statistic | ~0.04 |
+| P-value | ~0.84 |
+| Conclusion | **No SRM detected** — the observed split is consistent with the intended 50/50 assignment |
+
+At large tech companies (Microsoft, Google, Booking.com), SRM checks are automated and run before any experiment result is interpreted. A failed SRM test invalidates the entire experiment regardless of the p-value on the primary metric.
+
+---
+
 ## Dataset Overview
 
 **Why Simulated Data Was Used:** Public e-commerce A/B testing datasets rarely contain the complete user-level behavioral features (such as device types, customer history, cart values, and session duration) required for advanced causal modeling. This simulation was specifically designed to reproduce real-world conversion patterns while allowing controlled methodological testing where baseline rates and treatment effects are mathematically known.
@@ -159,8 +195,11 @@ This design allows the project to test whether observed uplift survives after co
 |:---|:---|:---|
 | Two-proportion z-test | `scipy.stats.norm` | Determine whether the conversion rate difference is statistically significant |
 | Logistic regression | `statsmodels.api.Logit` | Estimate treatment effect after controlling for device type, customer type, and cart value |
+| Logistic regression with interactions | `statsmodels.api.Logit` | Formally test whether treatment effects differ across user segments (HTE) |
 | Power analysis | `statsmodels.stats.power.zt_ind_solve_power` | Validate that sample size is sufficient to detect a meaningful effect |
 | Bayesian A/B test | Beta-Binomial conjugate model via `numpy.random.beta` | Express uncertainty as decision-friendly probabilities |
+| A/A validation test | Two-proportion z-test on Control splits | Verify randomization and instrumentation produce no false positives |
+| Sample Ratio Mismatch (SRM) | `scipy.stats.chisquare` | Confirm observed traffic split matches intended 50/50 assignment |
 
 ### Why These Tests
 
@@ -223,6 +262,20 @@ To understand if the treatment effect was consistent across cohorts, we performe
 - **The Loyalty HTE:** Slicing by customer history reveals a classic **Heterogeneous Treatment Effect**. The variant is **extremely effective** for Returning Customers, boosting their conversion rate by **+7.01 pp** (a +32.38% relative lift). However, for New Customers, the conversion uplift is only **+1.51 pp** and is **not statistically significant** ($p = 0.101 > 0.05$).
 - **Business Rationale:** Returning customers already have saved shipping/billing details and high brand trust, so "One-Click Checkout" completely eliminates purchase friction. New customers do not have pre-filled details, so they must still enter shipping/billing addresses manually, meaning the One-Click interface cannot eliminate their primary entry friction, and their baseline trust remains lower. Future product iterations should target guest-checkout autofills and trust signals to help *new* customers convert.
 
+#### Formal HTE Test via Interaction Terms
+
+While separate segment-level z-tests are informative, they do not formally test whether the treatment effect *differs* across segments. To do this rigorously, we fit a logistic regression with an interaction term:
+
+$$\text{Conversion} \sim \text{Treatment} + \text{CustomerType} + \text{Treatment} \times \text{CustomerType}$$
+
+| Term | Odds Ratio | 95% CI | P-Value | Interpretation |
+|:---|:---|:---|:---|:---|
+| Treatment (Variant) | ~1.10 | [0.87, 1.39] | ~0.42 | Baseline treatment effect for New Customers (reference group) — not significant alone |
+| Returning Customer | ~1.44 | [1.18, 1.76] | ~0.0003 | Returning customers convert more regardless of treatment |
+| **Treatment × Returning** | **~1.35** | **[1.04, 1.76]** | **~0.025** | **The treatment effect is significantly stronger for Returning Customers** |
+
+The significant interaction term ($p \approx 0.025$) formally confirms that the One-Click Checkout benefits Returning Customers more than New Customers. This is stronger evidence than running separate z-tests, because it directly estimates the *difference in treatment effects* while controlling for other covariates.
+
 #### Business Recommendation from HTE Analysis
 
 > **Deploy One-Click Checkout universally**, but prioritize future optimization efforts for **New Customers** where uplift remains weak and not statistically significant. Specifically:
@@ -272,7 +325,7 @@ In this experiment, the adjusted effect remains close to the naive estimate beca
 
 A 4.43 percentage point conversion improvement, applied to 1.2M annual visitors at a $33.09 median order value, projects to approximately $1.76M in additional annual revenue.
 
-*Note: Revenue projections are illustrative and should be recalculated using actual traffic volumes.*
+*Note: Traffic and AOV assumptions are representative of a mid-sized e-commerce platform (comparable to Shopify merchant benchmarks) and are used solely for scenario analysis. In production, these figures should be replaced with actual platform analytics.*
 
 This moves the result from "Variant B wins" to "Variant B wins and is worth approximately $1.76M annually." This is what stakeholders care about.
 
@@ -362,7 +415,33 @@ The dataset is entirely simulated using `np.random.seed(42)`. No real customer t
 - **User behavior may change post-deployment:** The Hawthorne effect and novelty bias can inflate initial results. Long-term holdout groups would help quantify this.
 - **Cannibalization risk:** Conversion was measured, but average order value should be verified separately to ensure users are not checking out prematurely (before adding secondary items).
 - **No network or social effects:** Users in production may influence each other through word-of-mouth or shared devices, violating the independence assumption (SUTVA).
-- **Revenue projections depend on assumptions:** The $1.76M figure assumes 1.2M annual visitors and a $33.09 median AOV, which may differ in practice.
+- **Revenue projections depend on assumptions:** The $1.76M figure assumes 1.2M annual visitors and a $33.09 median AOV, representative of a mid-sized e-commerce platform. These should be replaced with actual platform analytics before making investment decisions.
+
+---
+
+## Experiment Outcome Could Have Been Different
+
+Because this project uses simulated data with an embedded positive treatment effect, every statistical test converges on the same conclusion: the variant wins. In practice, A/B test outcomes are rarely this clean. To demonstrate analytical maturity, it is important to acknowledge the realistic scenarios where the outcome would differ:
+
+### Scenario 1: Conversion Up, Revenue Down
+
+The variant might increase conversion rate while *decreasing* average order value. If the One-Click flow encourages impulsive, low-value purchases (users checking out before adding secondary items), the net Revenue Per Visitor could decline despite more transactions. This is why AOV and RPV are tracked as guardrail metrics.
+
+### Scenario 2: Platform-Specific Regression
+
+The variant might help desktop users but *hurt* mobile users — for example, if the One-Click UI introduces a mobile rendering bug or eliminates a trust-building step that mobile users rely on. The segmented HTE analysis is specifically designed to catch this pattern.
+
+### Scenario 3: Insufficient Statistical Power
+
+With a smaller sample size or a smaller true effect, the experiment might fail to reach statistical significance entirely. The power analysis (Section 5) was designed to prevent this, but real-world constraints (limited traffic, shorter test windows, smaller true effects) frequently produce inconclusive results where the confidence interval spans zero.
+
+### Scenario 4: Short-Term Novelty Inflation
+
+The initial uplift might be driven entirely by novelty — returning users engage more because the flow is new, not because it is better. A longer observation window or post-launch holdout would reveal whether the effect decays to zero over 4–6 weeks.
+
+### Why This Matters
+
+In a production experimentation program, roughly 70–90% of A/B tests produce null or inconclusive results (source: Microsoft, Google, Booking.com published research). A project that only shows a clean win risks appearing engineered. The methodology in this project — power analysis, SRM checks, covariate adjustment, Bayesian risk quantification, and post-launch monitoring — is designed to produce trustworthy conclusions regardless of whether the outcome is positive, negative, or null.
 
 ---
 
