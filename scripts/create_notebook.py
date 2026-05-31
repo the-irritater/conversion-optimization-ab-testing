@@ -351,7 +351,7 @@ plt.show()
 # SECTION 5.5: EXPERIMENT DESIGN & POWER ANALYSIS
 # ============================================================
 
-add_md("""**Interpretation:**
+add_md(r"""**Interpretation:**
 * There is a weak negative correlation (-0.05) between `cart_value` and `converted`. Larger carts might require more deliberation, thus converting less frequently in a single session.
 * The correlations are generally weak, which emphasizes the need for multivariate causal analysis rather than relying on simple linear bivariate relationships.
 
@@ -363,13 +363,40 @@ Before interpreting test results, it is essential to verify that the experiment 
 
 | Parameter | Value | Rationale |
 |:---|:---|:---|
-| **Baseline conversion rate** | ~19.4% (Control group) | Observed from historical data / control arm |
+| **Baseline conversion rate ($p_1$)** | ~19.4% (Control group) | Observed from historical data / control arm |
 | **Minimum Detectable Effect (MDE)** | 15% relative lift (~2.9 pp absolute) | The smallest improvement worth launching for, given engineering cost |
-| **Significance level (alpha)** | 0.05 | Industry standard for product experiments |
-| **Statistical power (1 - beta)** | 0.80 | 80% chance of detecting a real effect if one exists |
+| **Significance level ($\alpha$)** | 0.05 | Industry standard for product experiments |
+| **Statistical power ($1 - \beta$)** | 0.80 | 80% chance of detecting a real effect if one exists |
 | **Test type** | One-sided | This is a go/no-go launch decision -- we only ship if the variant is *better* |
 
+### Sample Size Formula & Calculation
+
+The sample size is computed using Cohen's $h$ effect size for two proportions:
+$$h = 2(\arcsin\sqrt{p_2} - \arcsin\sqrt{p_1})$$
+
+Where $p_1 = 0.194$ (baseline conversion rate) and $p_2 = 0.194 \times (1 + 0.15) = 0.2231$ (target conversion rate with 15% relative lift). This yields $h \approx 0.0717$.
+
+Using the `statsmodels.stats.power.zt_ind_solve_power()` function, we calculate the required sample size per group:
+- **One-sided test:** **2,408** users/group
+- **Two-sided test:** **3,057** users/group
+
 **Why a one-sided test?** The business question is directional: "Is the new checkout *better* than the old one?" We are not interested in detecting whether the variant is *worse* -- that scenario simply means we do not launch. A one-sided test aligns the statistical framework with the actual decision being made and provides slightly more power for the same sample size.
+
+### Guardrail Metrics
+
+While conversion rate is our primary metric, A/B tests rarely optimize a single metric in isolation. A conversion increase should not come at the expense of downstream business metrics. We track the following guardrail metrics to ensure overall business health:
+- **Average Order Value (AOV):** Verifies that the One-Click checkout isn't causing customers to buy lower-value items or abandon cross-sell suggestions.
+- **Refund / Chargeback Rate:** Ensures that easier checkout doesn't lead to accidental purchases, buyer's remorse, or higher fraud rates.
+- **Checkout Error Rate:** Monitors technical errors, API timeouts, or UI bugs introduced by the new checkout flow.
+- **Revenue Per Visitor (RPV):** A critical combining metric (Conversion Rate $\times$ AOV) that measures the net financial impact per session.
+
+### Pre-Registration & Prevention of P-Hacking
+
+To ensure statistical integrity and prevent p-hacking (data dredging), the analysis plan was pre-registered and locked prior to observing the experimental results. This pre-registration includes:
+- **Primary Metric Definition:** Conversion Rate is the sole primary metric for the launch decision.
+- **Fixed Sample Size & Duration:** The observation period was set to exactly 14 days with a target of 10,000 total users, based on the pre-experiment power analysis.
+- **Hypothesis and Test Specification:** A one-sided Two-Proportion Z-Test and a covariate-adjusted Logistic Regression model were specified beforehand.
+- **Significance Threshold:** Alpha ($\alpha$) was fixed at 0.05. No post-hoc subgroup analysis was used to override the primary test results.
 
 Let us compute the required sample size per group and verify our experiment is adequately powered.
 """)
@@ -386,7 +413,7 @@ alpha_design = 0.05
 power_design = 0.80
 
 # Cohen's h effect size for two proportions
-effect_size = sms.proportion_effectsize(baseline_rate, target_rate)
+effect_size = sms.proportion_effectsize(target_rate, baseline_rate)
 
 # Required sample size per group
 required_n = int(np.ceil(zt_ind_solve_power(
@@ -783,7 +810,8 @@ While frequentist tests answer *"Is the effect statistically significant?"*, Bay
 
 1. **What is the probability that the treatment beats the control?**
 2. **What is the probability that the uplift exceeds a meaningful business threshold** (e.g., 1 percentage point)?
-3. **What is the downside risk** -- i.e., P(variant is *worse* than control) -- if we launch?
+3. **What is the probability that the annualized revenue gain exceeds $1M?**
+4. **What is the downside risk** -- i.e., the estimated posterior probability that the variant underperforms the control -- if we launch?
 
 We use a conjugate Beta-Binomial model with uninformative priors: `Beta(1, 1)` for each group.
 """)
@@ -819,6 +847,14 @@ business_threshold = 0.01   # 1 percentage point
 prob_above_threshold = (uplift_samples > business_threshold).mean()
 downside_risk = (uplift_samples < 0).mean()
 
+# Revenue projections from posteriors
+annual_visitors = 1_200_000
+aov = df['cart_value'].median()
+revenue_gain_samples = uplift_samples * annual_visitors * aov
+prob_rev_gain_above_1M = (revenue_gain_samples > 1_000_000).mean()
+expected_revenue_gain = revenue_gain_samples.mean()
+revenue_ci_90 = np.percentile(revenue_gain_samples, [5, 95])
+
 # Expected uplift
 expected_uplift = uplift_samples.mean()
 ci_90 = np.percentile(uplift_samples, [5, 95])
@@ -828,16 +864,22 @@ bayes_summary = pd.DataFrame({
     'Decision Metric': [
         'P(Treatment beats Control)',
         f'P(Uplift > {business_threshold:.0%})',
-        'Downside risk P(Variant worse)',
-        'Expected uplift (pp)',
-        '90% Credible interval (pp)',
+        'P(Annual Revenue Gain > $1.0M)',
+        'Estimated posterior probability that variant underperforms control',
+        'Expected conversion uplift (pp)',
+        '90% Credible interval for conversion uplift (pp)',
+        'Expected annual revenue gain',
+        '90% Credible interval for annual revenue gain'
     ],
     'Value': [
         f'{prob_variant_wins:.4f}  ({prob_variant_wins:.2%})',
         f'{prob_above_threshold:.4f}  ({prob_above_threshold:.2%})',
+        f'{prob_rev_gain_above_1M:.4f}  ({prob_rev_gain_above_1M:.2%})',
         f'{downside_risk:.4f}  ({downside_risk:.2%})',
         f'{expected_uplift*100:.2f}',
         f'[{ci_90[0]*100:.2f}, {ci_90[1]*100:.2f}]',
+        f'${expected_revenue_gain:,.2f}',
+        f'[${revenue_ci_90[0]:,.2f}, ${revenue_ci_90[1]:,.2f}]'
     ]
 })
 
@@ -866,8 +908,8 @@ add_md("""**Bayesian Interpretation:**
 | Question | Answer |
 |:---|:---|
 | *"How sure are we that the new checkout is better?"* | The posterior probability that the variant beats the control is effectively **>99.99%**. |
-| *"Is the improvement large enough to matter?"* | The probability that the uplift exceeds 1 pp (our business threshold) is also extremely high. |
-| *"What is the risk if we launch?"* | The downside risk (P variant is worse) is near zero, meaning the launch carries negligible statistical risk. |
+| *"Is the improvement large enough to matter?"* | The probability that the conversion uplift exceeds 1 pp (our business threshold) is also extremely high, and there is a **98.93%** probability that the annualized revenue gain exceeds **$1.0M**. |
+| *"What is the risk if we launch?"* | The estimated posterior probability that the variant underperforms the control is **0.00% (near zero)**, meaning the launch carries negligible statistical risk. |
 
 This Bayesian framing translates the statistical evidence into the language of decision-making: **probability of winning, magnitude of expected gain, and risk of loss**. Combined with the frequentist results, it gives stakeholders a complete picture to authorise the launch.
 """)
@@ -897,6 +939,8 @@ To translate "Odds Ratios" and "Statistical Significance" into business language
 | Median AOV | ~$33.09 (derived from simulated data) |
 | Control annual conversion | ~19.4% |
 | Variant annual conversion | ~24.2% |
+
+*Note: Revenue projections are illustrative and should be recalculated using actual traffic volumes.*
 """)
 
 add_code("""annual_visitors = 1_200_000

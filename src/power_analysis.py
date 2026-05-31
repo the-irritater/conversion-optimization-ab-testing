@@ -25,8 +25,8 @@ class ExperimentPowerAnalysis:
         """
         p_target = p_baseline * (1 + relative_mde)
         
-        # Calculate effect size using statsmodels proportion_effectsize
-        effect_size = sms.proportion_effectsize(p_baseline, p_target)
+        # Calculate effect size using statsmodels proportion_effectsize (ensuring positive value)
+        effect_size = sms.proportion_effectsize(p_target, p_baseline)
         
         sample_size = zt_ind_solve_power(
             effect_size=effect_size,

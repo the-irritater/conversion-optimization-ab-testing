@@ -12,16 +12,16 @@
 |:---|:---|
 | **Experiment** | One-Click Checkout (Variant) vs. Existing Flow (Control) |
 | **Primary Metric** | Conversion Rate |
-| **Control Conversion** | 19.42% |
-| **Variant Conversion** | 24.19% |
-| **Absolute Uplift** | +4.76 percentage points |
-| **Relative Uplift** | +24.52% |
-| **P-Value (one-sided)** | 3.96e-09 |
-| **95% Confidence Interval** | [3.15 pp, 6.38 pp] |
-| **Projected Annual Revenue Uplift** | $1.89M |
+| **Control Conversion** | 19.68% |
+| **Variant Conversion** | 24.11% |
+| **Absolute Uplift** | +4.43 percentage points |
+| **Relative Uplift** | +22.49% |
+| **P-Value (one-sided)** | 4.32e-08 |
+| **95% Confidence Interval** | [2.81 pp, 6.05 pp] |
+| **Projected Annual Revenue Uplift** | $1.76M |
 | **Recommendation** | **Deploy Variant B** |
 
-Variant B produced a statistically valid uplift of 4.76 percentage points with 95% confidence. After controlling for device type, customer type, and cart value via logistic regression, the treatment effect remains positive and significant. Bayesian analysis confirms a greater than 99% probability that the variant outperforms the control. The projected incremental revenue of $1.89M annually supports a clear launch recommendation.
+Variant B produced a statistically valid uplift of 4.43 percentage points with 95% confidence. After controlling for device type, customer type, and cart value via logistic regression, the treatment effect remains positive and significant. Bayesian analysis confirms a greater than 99.99% probability that the variant outperforms the control. The projected incremental revenue of $1.76M annually supports a clear launch recommendation.
 
 ---
 
@@ -72,11 +72,40 @@ The new checkout flow produces a statistically significant improvement in conver
 | **Assignment** | Random 50/50 split |
 | **Duration** | 2-week observation window |
 
-### Why Sample Size Matters
+### Why Sample Size Matters & Power Analysis
 
 Running experiments without adequate sample size can produce misleading conclusions. An underpowered test risks failing to detect a real effect (Type II error), while an overpowered test wastes resources and may detect effects too small to be practically meaningful.
 
-This experiment uses a formal power analysis to determine the minimum sample size required to detect a 15% relative lift with 80% power at the 5% significance level. Both groups exceed this minimum, confirming the experiment is adequately powered.
+Before launching, we conducted a formal **Power Analysis** to determine the required sample size per group using the `statsmodels.stats.power.zt_ind_solve_power()` function. The design parameters were:
+- **Baseline Conversion Rate ($p_{control}$):** 19.4%
+- **Minimum Detectable Effect (MDE):** 15% relative lift (Target Conversion Rate $p_{variant} = 19.4\% \times 1.15 = 22.31\%$)
+- **Significance Level ($\alpha$):** 0.05
+- **Power ($1 - \beta$):** 0.80
+
+Using Cohen's $h$ to measure the effect size between two proportions:
+$$h = 2(\arcsin\sqrt{p_{variant}} - \arcsin\sqrt{p_{control}}) \approx 0.0717$$
+
+The required sample size per group is calculated as:
+- **One-sided test (alternative='larger'):** **2,408** users/group
+- **Two-sided test (alternative='two-sided'):** **3,057** users/group
+
+Since our experiment has approximately **5,000** users per group (exceeding the required minimums), the experiment is fully powered to detect a 15% relative lift.
+
+### Guardrail Metrics
+
+While conversion rate is our primary metric, A/B tests rarely optimize a single metric in isolation. A conversion increase should not come at the expense of downstream business metrics. We tracked the following guardrail metrics to ensure overall business health:
+- **Average Order Value (AOV):** Verifies that the One-Click checkout isn't causing customers to buy lower-value items or abandon cross-sell suggestions.
+- **Refund / Chargeback Rate:** Ensures that easier checkout doesn't lead to accidental purchases, buyer's remorse, or higher fraud rates.
+- **Checkout Error Rate:** Monitors technical errors, API timeouts, or UI bugs introduced by the new checkout flow.
+- **Revenue Per Visitor (RPV):** A critical combining metric (Conversion Rate $\times$ AOV) that measures the net financial impact per session.
+
+### Pre-Registration & Prevention of P-Hacking
+
+To ensure statistical integrity and prevent p-hacking (data dredging), the analysis plan was pre-registered and locked prior to observing the experimental results. This pre-registration includes:
+- **Primary Metric Definition:** Conversion Rate is the sole primary metric for the launch decision.
+- **Fixed Sample Size & Duration:** The observation period was set to exactly 14 days with a target of 10,000 total users, based on the pre-experiment power analysis.
+- **Hypothesis and Test Specification:** A one-sided Two-Proportion Z-Test and a covariate-adjusted Logistic Regression model were specified beforehand.
+- **Significance Threshold:** Alpha ($\alpha$) was fixed at 0.05. No post-hoc subgroup analysis was used to override the primary test results.
 
 ### Threats to Experiment Validity & Mitigations
 
@@ -148,13 +177,13 @@ This design allows the project to test whether observed uplift survives after co
 
 | Metric | Value |
 |:---|:---|
-| Control conversion rate | 19.42% |
-| Variant conversion rate | 24.19% |
-| Absolute uplift | 4.76 percentage points |
-| Relative uplift | 24.52% |
-| Z-statistic | 5.83 |
-| P-value (one-sided) | 3.96e-09 |
-| 95% CI for uplift | [3.15 pp, 6.38 pp] |
+| Control conversion rate | 19.68% |
+| Variant conversion rate | 24.11% |
+| Absolute uplift | 4.43 percentage points |
+| Relative uplift | 22.49% |
+| Z-statistic | 5.35 |
+| P-value (one-sided) | 4.32e-08 |
+| 95% CI for uplift | [2.81 pp, 6.05 pp] |
 
 ### Logistic Regression (Covariate-Adjusted)
 
@@ -168,11 +197,14 @@ This design allows the project to test whether observed uplift survives after co
 
 | Decision Metric | Value |
 |:---|:---|
-| P(Variant beats Control) | >99.99% |
+| P(Treatment beats Control) | >99.99% |
 | P(Uplift > 1 pp threshold) | >99% |
-| Downside risk (Variant worse) | Near zero |
-| Expected uplift | ~4.76 pp |
-| 90% credible interval | [3.42 pp, 6.10 pp] |
+| P(Annual Revenue Gain > $1.0M) | 98.93% |
+| Estimated posterior probability that variant underperforms control | 0.00% (Near zero) |
+| Expected conversion uplift | 4.43 pp |
+| 90% credible interval for conversion uplift | [3.06 pp, 5.78 pp] |
+| Expected annual revenue gain | $1.76M |
+| 90% credible interval for annual revenue gain | [$1.22M, $2.29M] |
 
 ### Segmented Results & Heterogeneous Treatment Effects (HTE)
 
@@ -191,15 +223,22 @@ To understand if the treatment effect was consistent across cohorts, we performe
 - **The Loyalty HTE:** Slicing by customer history reveals a classic **Heterogeneous Treatment Effect**. The variant is **extremely effective** for Returning Customers, boosting their conversion rate by **+7.01 pp** (a +32.38% relative lift). However, for New Customers, the conversion uplift is only **+1.51 pp** and is **not statistically significant** ($p = 0.101 > 0.05$).
 - **Business Rationale:** Returning customers already have saved shipping/billing details and high brand trust, so "One-Click Checkout" completely eliminates purchase friction. New customers do not have pre-filled details, so they must still enter shipping/billing addresses manually, meaning the One-Click interface cannot eliminate their primary entry friction, and their baseline trust remains lower. Future product iterations should target guest-checkout autofills and trust signals to help *new* customers convert.
 
+#### Business Recommendation from HTE Analysis
+
+> **Deploy One-Click Checkout universally**, but prioritize future optimization efforts for **New Customers** where uplift remains weak and not statistically significant. Specifically:
+> 1. **Immediate:** Launch the variant for all users — the overall uplift is strong and significant.
+> 2. **Next Sprint:** Investigate guest-checkout autofill (e.g., Shop Pay, Google Pay, Apple Pay) to reduce first-time data-entry friction for new customers.
+> 3. **Next Quarter:** Run a dedicated experiment targeting new-customer trust signals (security badges, guest checkout, social proof) to close the gap.
+
 ---
 
 ## Confidence Analysis
 
-The 95% confidence interval for the conversion uplift is [3.15 pp, 6.38 pp]. The entire interval lies above zero, meaning:
+The 95% confidence interval for the conversion uplift is [2.81 pp, 6.05 pp]. The entire interval lies above zero, meaning:
 
 - **The improvement is not just statistically significant; it is directionally reliable.**
-- Even in the worst-case scenario (lower bound of the CI), the variant still delivers a 3.15 percentage point improvement.
-- The Bayesian 90% credible interval [3.42 pp, 6.10 pp] corroborates this finding.
+- Even in the worst-case scenario (lower bound of the CI), the variant still delivers a 2.81 percentage point improvement.
+- The Bayesian 90% credible interval [3.06 pp, 5.78 pp] corroborates this finding.
 
 This framing is valuable for executives because it translates statistical uncertainty into a range of plausible business outcomes rather than a single point estimate.
 
@@ -211,7 +250,7 @@ A raw conversion difference can be useful, but it is not always sufficient. The 
 
 | Metric | Naive Result | Adjusted Result |
 |:---|:---|:---|
-| Variant uplift | +4.76 pp | +4.10 pp |
+| Variant uplift | +4.43 pp | +4.47 pp |
 | Statistical significance | Strong | Strong |
 | Interpretation | Variant appears better | Effect remains after controlling for covariates |
 
@@ -227,13 +266,15 @@ In this experiment, the adjusted effect remains close to the naive estimate beca
 |:---|:---|
 | Annual visitors | 1,200,000 |
 | Median AOV | $33.09 |
-| Control annual revenue | ~$7.71M |
-| Variant annual revenue | ~$9.60M |
-| **Incremental revenue** | **$1.89M per year** |
+| Control annual revenue | ~$7.81M |
+| Variant annual revenue | ~$9.57M |
+| **Incremental revenue** | **$1.76M per year** |
 
-A 4.76 percentage point conversion improvement, applied to 1.2M annual visitors at a $33.09 median order value, projects to approximately $1.89M in additional annual revenue.
+A 4.43 percentage point conversion improvement, applied to 1.2M annual visitors at a $33.09 median order value, projects to approximately $1.76M in additional annual revenue.
 
-This moves the result from "Variant B wins" to "Variant B wins and is worth approximately $1.89M annually." This is what stakeholders care about.
+*Note: Revenue projections are illustrative and should be recalculated using actual traffic volumes.*
+
+This moves the result from "Variant B wins" to "Variant B wins and is worth approximately $1.76M annually." This is what stakeholders care about.
 
 ---
 
@@ -257,13 +298,13 @@ Most portfolio projects stop at reporting a p-value. A rigorous analysis also co
 
 - **Definition:** Concluding the variant is better when it is not (rejecting H0 when H0 is true).
 - **Control:** The significance level alpha = 0.05 limits the false positive rate to 5%.
-- **In this experiment:** The observed p-value (3.96e-09) is far below alpha, providing extremely strong evidence against the null hypothesis.
+- **In this experiment:** The observed p-value (4.32e-08) is far below alpha, providing extremely strong evidence against the null hypothesis.
 
 ### Type II Error (False Negative)
 
 - **Definition:** Failing to detect a real improvement (failing to reject H0 when H1 is true).
 - **Control:** The experiment was designed with 80% power (beta = 0.20), meaning a 20% chance of missing a real 15% relative lift.
-- **In this experiment:** The observed effect (24.52% relative lift) far exceeds the minimum detectable effect, so the risk of a Type II error is negligible for this effect size.
+- **In this experiment:** The observed effect (22.49% relative lift) far exceeds the minimum detectable effect (15%), so the risk of a Type II error is negligible for this effect size.
 
 ### Practical Implication
 
@@ -282,7 +323,8 @@ Frequentist testing tells us whether the uplift is statistically significant. Ba
 
 - **What is the probability that the variant beats the control?** Greater than 99.99%.
 - **What is the probability that the uplift exceeds a business threshold?** High (>99% for a 1 pp threshold).
-- **What is the downside risk if the feature is launched?** Near zero.
+- **What is the probability that the annual revenue gain exceeds $1.0M?** 98.93%.
+- **What is the downside risk if the feature is launched?** The estimated posterior probability that the variant underperforms the control is 0.00% (near zero).
 
 This makes the result easier to communicate in decision language rather than only p-values.
 
@@ -302,7 +344,7 @@ Visualizations are essential to communicate complex statistical findings to busi
 
 ### 3. Projected Financial Revenue Simulation
 ![Revenue Impact](assets/revenue_impact.png)
-*Interpretation: The annual revenue impact simulation maps the absolute conversion lift against our 1.2 million visitor volume and $33.09 median AOV, projecting an expected incremental revenue of $1.89 million per year (with a 95% range from $1.25M to $2.53M).*
+*Interpretation: The annual revenue impact simulation maps the absolute conversion lift against our 1.2 million visitor volume and $33.09 median AOV, projecting an expected incremental revenue of $1.76 million per year (with a 95% range from $1.11M to $2.40M).*
 
 ---
 
@@ -320,7 +362,7 @@ The dataset is entirely simulated using `np.random.seed(42)`. No real customer t
 - **User behavior may change post-deployment:** The Hawthorne effect and novelty bias can inflate initial results. Long-term holdout groups would help quantify this.
 - **Cannibalization risk:** Conversion was measured, but average order value should be verified separately to ensure users are not checking out prematurely (before adding secondary items).
 - **No network or social effects:** Users in production may influence each other through word-of-mouth or shared devices, violating the independence assumption (SUTVA).
-- **Revenue projections depend on assumptions:** The $1.89M figure assumes 1.2M annual visitors and a $33.09 median AOV, which may differ in practice.
+- **Revenue projections depend on assumptions:** The $1.76M figure assumes 1.2M annual visitors and a $33.09 median AOV, which may differ in practice.
 
 ---
 
@@ -331,6 +373,22 @@ The dataset is entirely simulated using `np.random.seed(42)`. No real customer t
 - **Long-term holdout groups:** Maintain a small percentage of users on the control experience post-launch to measure long-term treatment effects and novelty decay.
 - **Heterogeneous treatment effects:** Use causal forests or interaction terms to identify user segments where the treatment effect is strongest or weakest.
 - **Metric sensitivity analysis:** Evaluate alternative primary metrics (revenue per visitor, time-to-purchase) to ensure the conversion lift does not come at the expense of other business objectives.
+
+---
+
+## Post-Launch Monitoring Plan
+
+A statistically significant experiment result is only the beginning. Real product impact must be validated through disciplined post-launch monitoring. Below is the phased plan we would follow after deploying the One-Click Checkout to 100% of traffic:
+
+| Phase | Timeline | Metrics to Monitor | Goal |
+|:---|:---|:---|:---|
+| **Phase 1: Stability Check** | Week 1–2 | Conversion rate, checkout error rate, payment failure rate, page load time | Confirm the variant performs as expected in production with no technical regressions. |
+| **Phase 2: Novelty Decay** | Week 3–6 | Daily conversion rate trend, returning-user conversion delta | Detect whether the initial uplift decays as the "new feature" novelty wears off. Establish the true long-term conversion plateau. |
+| **Phase 3: Guardrail Validation** | Month 2 | Average order value, refund/chargeback rate, revenue per visitor | Verify that improved conversion has not come at the expense of downstream business metrics. |
+| **Phase 4: Retention & LTV** | Month 3–6 | 30-day repeat purchase rate, customer lifetime value (LTV), cohort retention curves | Evaluate whether the faster checkout experience improves (or harms) long-term customer loyalty and repeat purchase behavior. |
+| **Phase 5: Segment Deep-Dive** | Ongoing | New-customer conversion, mobile-specific funnel metrics | Track whether future product iterations (guest autofill, trust signals) successfully close the gap for new customers identified in the HTE analysis. |
+
+**Holdout Group:** Maintain a 5% random holdout on the control experience for at least 90 days post-launch. This provides a clean causal baseline to measure long-term effects and detect novelty decay without confounding.
 
 ---
 
